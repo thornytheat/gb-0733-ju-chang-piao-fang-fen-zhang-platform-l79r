@@ -47,5 +47,6 @@ REASONS = {
     'RUN_NOT_FOUND': '未找到运行记录',
     'PUBLICATION_CHANGED': '票源、权益或原场次定义已发布，变化后须使用新账册',
     'REFUND_CHANGED': '本次输入遗漏或改写了已入账的冲正',
+    'STALE_SCAN_SNAPSHOT': '核销表早于当前完整账：缺少已登记核销且没有新记录，当前结算保持不变',
     'RECONCILE_FAILED': '勾稽未通过，批次未发布',
 }

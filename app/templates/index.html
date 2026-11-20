@@ -16,8 +16,12 @@
         <span class="ticket-mark" aria-hidden="true"></span><span>剧场票房<span class="brand-line">巡演财务</span></span>
       </a>
       <nav aria-label="业务模块">
-        {% for key, label in modules %}
+        {% for key, label in rail_modules %}
+        {% if key == 'batches' %}
+        <a class="rail__item" href="/batches{% if not preview %}?run={{ manifest.run_id }}{% endif %}">{{ label }}</a>
+        {% else %}
         <a class="rail__item" href="#{{ key }}" data-module="{{ key }}" {% if key == 'reconcile' %}aria-current="location"{% endif %}>{{ label }}</a>
+        {% endif %}
         {% endfor %}
       </nav>
       <div class="rail__book">

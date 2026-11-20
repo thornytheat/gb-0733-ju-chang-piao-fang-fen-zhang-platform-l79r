@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>核销批次核对 · 剧场票房分账台</title>
+  <link rel="stylesheet" href="/static/theme.css">
+  <link rel="stylesheet" href="/static/layout.css">
+  <link rel="stylesheet" href="/static/components.css">
+  <link rel="stylesheet" href="/static/batches.css">
+  <script src="/static/batches.js" type="module"></script>
+</head>
+<body data-run="{{ summary.run_id }}" data-preview="{{ '1' if preview else '' }}">
+  <div class="app">
+    <aside class="rail">
+      <a class="rail__brand" href="/" aria-label="剧场票房分账台首页">
+        <span class="ticket-mark" aria-hidden="true"></span><span>剧场票房<span class="brand-line">巡演财务</span></span>
+      </a>
+      <nav aria-label="业务模块">
+        {% for key, label in rail_modules %}
+        {% if key == 'batches' %}
+        <a class="rail__item" href="/batches{% if not preview %}?run={{ summary.run_id }}{% endif %}" aria-current="location">{{ label }}</a>
+        {% else %}
+        <a class="rail__item" href="/{% if not preview %}?run={{ summary.run_id }}{% endif %}#{{ key }}">{{ label }}</a>
+        {% endif %}
+        {% endfor %}
+      </nav>
+      <div class="rail__book">
+        <span>当前账册</span><strong>{{ summary.book }}</strong>
+        <span>规则版本</span><code>{{ summary.rule_version }}</code>
+      </div>
+    </aside>
+    <div class="work">
+      <header class="topbar">
+        <div class="topbar__title"><h1>核销批次核对</h1>
+          <span class="state {{ 'state--muted' if preview else 'state--ok' }}">{{ '样例预览' if preview else '已发布账册' }}</span>
+        </div>
+        <div class="actions"><a class="btn btn--quiet" href="/{% if not preview %}?run={{ summary.run_id }}{% endif %}">返回结算台</a></div>
+      </header>
+      <main class="content">
+        <div class="batchline">
+          <span>当前批次 <code title="{{ summary.run_id }}">{{ summary.run_id if not preview else '样例' }}</code></span>
+          <span>生成 <time datetime="{{ summary.generated_at }}">{{ local_time }}</time></span>
+          <span>上海时间</span>
+          <output id="batch-message" aria-live="polite"></output>
+        </div>
+
+        <section class="panel batch-head" aria-labelledby="batch-head-title">
+          <div class="panel__head"><h2 id="batch-head-title">本批核对结论</h2>
+            <span>相对上一版完整账（首版无前置批次）</span></div>
+          <div class="kpis kpis--batch">
+            <div class="kpi"><span>最终场馆应收</span><strong><small>¥</small>{{ summary.payable_cents | money }}</strong></div>
+            <div class="kpi"><span>净收款</span><strong><small>¥</small>{{ summary.net_cents | money }}</strong></div>
+            <div class="kpi"><span>未结余额</span><strong><small>¥</small>{{ summary.unsettled_cents | money }}</strong></div>
+            <div class="kpi"><span>采信核销</span><strong>{{ summary.scan_count }}</strong></div>
+            <div class="kpi"><span>核销拒收</span><strong>{{ summary.isolated_scan_count }}</strong></div>
+          </div>
+          <div class="verdict-strip" role="list" aria-label="记录处置统计">
+            {% for state in ['kept', 'replaced', 'added', 'lost'] %}
+            <span class="verdict verdict--{{ state }}" role="listitem">
+              <b>{{ summary.diff_counts[state] }}</b>{{ {'kept': '保留', 'replaced': '替代', 'added': '新增', 'lost': '冲掉'}[state] }}
+            </span>
+            {% endfor %}
+            <span class="verdict-note">迟到且更早的核销在「替代/拒收」中可追溯；当前结算始终以最新完整账为准。</span>
+          </div>
+        </section>
+
+        <section class="panel" aria-labelledby="history-title">
+          <div class="panel__head"><h2 id="history-title">提交批次时间线</h2><span>旧快照不删除，失败重传不产生新批次</span></div>
+          <div class="history-scroll" tabindex="0">
+            <table class="ledger history-table">
+              <thead><tr><th scope="col">序号</th><th scope="col">批次</th><th scope="col">状态</th>
+                <th scope="col" class="num">保留</th><th scope="col" class="num">替代</th><th scope="col" class="num">新增</th>
+                <th scope="col" class="num">冲掉</th><th scope="col" class="num">核销</th><th scope="col" class="num">场馆应收 ¥</th></tr></thead>
+              <tbody id="history-rows">
+              {% if preview %}
+                <tr class="is-current"><td class="num">0</td><td><code>样例</code></td><td><span class="state state--muted">预览</span></td>
+                  <td class="num">{{ summary.diff_counts.kept }}</td><td class="num">{{ summary.diff_counts.replaced }}</td>
+                  <td class="num">{{ summary.diff_counts.added }}</td><td class="num">{{ summary.diff_counts.lost }}</td>
+                  <td class="num">{{ summary.scan_count }}</td><td class="num">{{ summary.payable_cents | money }}</td></tr>
+              {% else %}
+                {% for record in history %}
+                <tr class="{{ 'is-current' if record.state == 'current' else '' }}">
+                  <td class="num">{{ record.sequence }}</td>
+                  <td><a class="history-link" href="/batches?run={{ record.run_id }}"><code title="{{ record.run_id }}">{{ record.run_id[:18] }}{{ '…' if record.run_id|length > 18 else '' }}</code></a></td>
+                  <td><span class="state {{ 'state--ok' if record.state == 'current' else 'state--muted' }}">{{ '当前账' if record.state == 'current' else '历史版' }}</span></td>
+                  <td class="num" data-summary="{{ record.run_id }}" data-field="kept">…</td>
+                  <td class="num" data-summary="{{ record.run_id }}" data-field="replaced">…</td>
+                  <td class="num" data-summary="{{ record.run_id }}" data-field="added">…</td>
+                  <td class="num" data-summary="{{ record.run_id }}" data-field="lost">…</td>
+                  <td class="num" data-summary="{{ record.run_id }}" data-field="scan_count">…</td>
+                  <td class="num" data-summary="{{ record.run_id }}" data-field="payable_cents">…</td>
+                </tr>
+                {% endfor %}
+              {% endif %}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="panel evidence" aria-labelledby="detail-title">
+          <div class="panel__head evidence-head">
+            <div class="evidence-title"><h2 id="detail-title">批次核对明细</h2><span id="detail-run">{{ summary.run_id if not preview else '样例' }}</span></div>
+          </div>
+          <form class="filters" id="batch-filters">
+            <label class="sr-only" for="batch-view">明细视图</label>
+            <select id="batch-view">
+              <option value="changes">占票处置（保留/替代/新增/冲掉）</option>
+              <option value="isolated">核销拒收与迟到解释</option>
+            </select>
+            <label class="sr-only" for="batch-filter">搜票码、场次或核销单号</label>
+            <input id="batch-filter" placeholder="搜票码、场次或核销单号" maxlength="64" type="search">
+            <button class="btn" type="submit">筛选</button>
+            <output id="batch-status" aria-live="polite"></output>
+          </form>
+          <div class="evidence-scroll" tabindex="0" aria-label="批次核对明细">
+            <table class="ledger evidence-table" aria-label="批次核对明细">
+              <thead id="batch-columns"></thead><tbody id="batch-rows"></tbody>
+            </table>
+            <noscript>启用 JavaScript 查看批次核对明细。</noscript>
+          </div>
+          <div class="pager"><button class="btn btn--quiet" id="batch-back" type="button" disabled>上一页</button>
+            <button class="btn btn--quiet" id="batch-next" type="button" disabled>下一页</button></div>
+        </section>
+      </main>
+      <footer class="statusbar">
+        <span class="state state--ok">金额勾稽通过</span>
+        <span>本页只读，不提供权限与批量运营操作</span>
+        <span class="statusbar__right"><a href="/docs">API</a></span>
+      </footer>
+    </div>
+  </div>
+</body>
+</html>
